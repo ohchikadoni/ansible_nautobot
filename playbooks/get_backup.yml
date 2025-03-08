@@ -19,8 +19,8 @@
         #debug:
         #var: nautobot_response.json
 
-    - name: Print message if backup is enabled
+    - name: Check for backup_enable attribute in devices
       debug:
-        msg: "Backup is enabled on {{ item.name }}"
-      when: item.custom_fields is defined and item.custom_fields.backup_state | default(false) | bool
-      loop: "{{ response.json.results }}"
+        msg: "Device {{ item.name }} has backup_state: true"
+      loop: "{{ nautobot_response.json.results }}"
+      when: item.custom_fields.backup_state == true
