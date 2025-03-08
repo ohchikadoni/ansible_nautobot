@@ -1,0 +1,3 @@
+#nautobot_api_url: "http://nautobot.local/api"
+nautobot_api_url: "http://10.10.10.104:8080/api/"
+nautobot_api_key: "{{ lookup('env', 'NAUTOBOT_API_KEY') }}"
