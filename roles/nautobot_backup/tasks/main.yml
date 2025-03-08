@@ -1,0 +1,15 @@
+- name: Get all devices from API
+  uri:
+    url: "http://10.10.10.104:8080/api/dcim/devices/"
+    method: GET
+    return_content: yes
+    headers:
+      Content-Type: "application/json"
+  register: response
+
+- name: Print device name if backup_state is true
+  debug:
+    msg: "Device {{ item.name }} has backup enabled."
+  when: item.custom_fields.backup_state | default(false) | bool
+  loop: "{{ response.json.results }}"
+

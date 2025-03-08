@@ -1,0 +1,5 @@
+- name: Connect to Nautobot API
+  hosts: localhost
+  gather_facts: no
+  roles:
+    - nautobot_backup
