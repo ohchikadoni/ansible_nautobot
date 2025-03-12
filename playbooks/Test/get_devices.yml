@@ -6,7 +6,7 @@
   tasks:
     - name: Fetch devices from Nautobot API
       uri:
-        url: "http://10.10.10.104:8080/api/dcim/devices/?format=json"
+        url: "http://10.10.10.101:8080/api/dcim/devices/?format=json"
         method: GET
         headers:
           Authorization: "Token 3a28f76fe9d03a5467e955e71cc5b37c6a047b18"

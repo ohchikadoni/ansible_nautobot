@@ -9,10 +9,6 @@
     return_content: yes
   register: nautobot_response
 
-        #    - name: Show Nautobot API response
-        #debug:
-        #var: nautobot_response.json
-
 - name: Check for backup_enable attribute in devices
   debug:
     msg: "Device {{ item.name }} has backup_state: true"
