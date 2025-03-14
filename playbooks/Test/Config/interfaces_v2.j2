@@ -1,0 +1,18 @@
+{% for interface in interfaces %}
+interface {{ interface.name }}
+{% if interface.enabled %}
+    no shut
+{% endif %}
+
+{% if interface.untagged_vlan %}
+    #Untagged VLAN: vlan untagged {{ (vlans | selectattr('id', 'equalto', interface.untagged_vlan.id) | list | first).vid }}
+{% endif %}
+
+{% if interface.tagged_vlans %}
+    Tagged VLANs: 
+    {% for tagged_vlan in vlans | selectattr('id', 'in', interface.tagged_vlans) | list %}
+        {{ tagged_vlan.name }} (VID: {{ tagged_vlan.vid }})
+    {% endfor %}
+{% endif %}
+{% endfor %}
+

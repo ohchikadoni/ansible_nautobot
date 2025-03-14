@@ -1,0 +1,11 @@
+ {% for interface in interfaces %}
+ interface {{ interface.name }}
+ Type: {{ interface.type }}
+ Status: {{ interface.enabled | default('Unknown') }}
+ {% if interface.untagged_vlan %}
+#Untagged VLAN: {{ vlans | selectattr('id', 'equalto', interface.untagged_vlan.id) | list | first | tojson }}
+ {% endif %}
+ {% if interface.tagged_vlans %}
+ Tagged VLANs: {{ vlans | selectattr('id', 'in', interface.tagged_vlans) | list | tojson }}
+ {% endif %}
+ {% endfor %}
