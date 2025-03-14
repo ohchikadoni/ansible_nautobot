@@ -1,0 +1,84 @@
+---
+- name: Get interfaces from Nautobot and save to file
+  hosts: localhost
+  gather_facts: no
+  vars:
+    nautobot_url: "http://10.10.10.101:8080/api/dcim/interfaces/?device=9ee2ad13-3be6-44e7-92ef-1103bbdfd8f6"
+    nautobot_token: "Token 3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
+    output_file: "/tmp/interfaces.txt"
+  tasks:
+    - name: Retrieve interface data from Nautobot
+      uri:
+        url: "{{ nautobot_url }}"
+        method: GET
+        headers:
+          Authorization: "Token 3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
+          Content-Type: "application/json; indent=4"
+        return_content: yes
+      register: response
+
+    - name: Debug response structure from Nautobot
+      debug:
+        var: response.json
+
+    - name: Retrieve VLAN details for interfaces (Untagged VLAN)
+      uri:
+        url: "http://10.10.10.101:8080/api/ipam/vlans/{{ item.id }}"
+        method: GET
+        headers:
+          Authorization: "Token 3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
+          Content-Type: "application/json; indent=4"
+        return_content: yes
+      loop: "{{ response.json.results | map(attribute='untagged_vlan') | selectattr('id', 'defined') | list }}"
+      loop_control:
+        label: "untagged_vlan"
+      when: item is not none and item.id is not none
+      register: untagged_vlan_details
+
+    - name: Debug untagged VLAN details
+      debug:
+        var: untagged_vlan_details
+
+    - name: Print untagged VLan details
+      debug:
+        msg: "Untagged VLan details: {{ untagged_vlan_details }}"
+
+    - name: Retrieve VLAN details for tagged VLANs
+      uri:
+        url: "http://10.10.10.101:8080/api/ipam/vlans/{{ item.id }}"
+        method: GET
+        headers:
+          Authorization: "Token 3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
+          Content-Type: "application/json; indent=4"
+        return_content: yes
+      loop: "{{ response.json.results | map(attribute='tagged_vlans') | flatten | selectattr('id', 'defined') | list }}"
+      loop_control:
+        label: "tagged_vlan"
+      when: item is not none and item.id is not none
+      register: tagged_vlan_details
+
+    - name: debug tagged vlan details
+      debug:
+        var: tagged_vlan_details
+
+    - name: Print tagged VLAN details
+      debug:
+        msg: "Tagged VLAN details: {{ tagged_vlan_details }}"
+
+    - name: Save interfaces data using Jinja2 template
+      template:
+        src: "interfaces_v3.j2"
+        dest: "{{ output_file }}"
+      vars:
+        interfaces: "{{ response.json.results }}"
+        vlans: "{{ untagged_vlan_details.results | map(attribute='json') | list + tagged_vlan_details.results | map(attribute='json') | list }}"
+
+    - name: Print output file path
+      debug:
+        msg: "Interfaces data saved to {{ output_file }}"
+
+    - name: Debug interface data
+      debug:
+        msg: "{{ item.json.vid }}"
+      loop: "{{ tagged_vlan_details.results  }}"
+
