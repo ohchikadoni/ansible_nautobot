@@ -1,0 +1,16 @@
+{% for interface in interfaces %}
+interface {{ interface.name }}
+{% if interface.enabled %}
+ no shut
+{% endif %}
+{% if interface.untagged_vlan %}
+ vlan access {{ (vlans | selectattr('id', 'equalto', interface.untagged_vlan.id) | map(attribute='vid') | list | first) | default("Unknown") }}
+{% endif %}
+{% if interface.tagged_vlans %}
+{% for vlan in interface.tagged_vlans %}
+{% set vlan_info = (tagged_vlans | selectattr("id", "equalto", vlan.id) | first) %}
+ vlan trunk allowed {{ vlan_info.vid if vlan_info else "Unknown" }}
+ {% endfor %}
+{% endif %}
+
+{% endfor %}
