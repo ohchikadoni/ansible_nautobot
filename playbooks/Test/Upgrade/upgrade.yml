@@ -23,7 +23,7 @@
 
     - name: Filter devices with backup enabled
       set_fact:
-        backup_devices: "{{ nautobot_response.json.results | selectattr('custom_fields.backup_state', 'equalto', true) | list }}"
+        upgrade_devices: "{{ nautobot_response.json.results | selectattr('custom_fields.upgrade_state', 'equalto', true) | list }}"
 
     - name: Fetch primary IPv4 address for each backup-enabled device
       uri:
@@ -33,13 +33,13 @@
         headers:
           Authorization: "Token  3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
           Accept: "application/json; indent=4"
-      loop: "{{ backup_devices }}"
+      loop: "{{ upgrade_devices }}"
       when: item.primary_ip4 is defined
       register: ip_responses
 
     - name: Merge IPs with devices
       set_fact:
-        devices_with_ips: "{{ backup_devices | zip(ip_responses.results | map(attribute='json.address')) | list }}"
+        devices_with_ips: "{{ upgrade_devices | zip(ip_responses.results | map(attribute='json.address')) | list }}"
 
     - name: Display hostnames and actual primary IPv4 addresses
       debug:
@@ -52,28 +52,9 @@
       delegate_to: localhost
       ignore_errors: yes
 
-    - name: Fetch running configuration from Aruba device
-      aruba_command:
-        commands:
-          - show running-config
-      register: running_config_output
-      delegate_to: "{{ item.1.split('/')[0] }}"
-      loop: "{{ devices_with_ips }}"
-    
-
-    - name: Debug output of the running configuration
-      debug:
-        msg: "{{ running_config_output }}"
-
-
-    - name: Display the running configuration
-      debug:
-        msg: "{{ running_config_output.stdout }}"
-      when: running_config_output.stdout is defined
-
-    - name: Save configuration to file
-      copy:
-        content: "{{ running_config_output.stdout }}"
-        dest: "./configs/{{ item.0.name }}.conf"
-      loop: "{{ devices_with_ips }}"
-      when: running_config_output.stdout is defined
+    - name: Execute SCP to copy firmware and automatically answer 'yes'
+      command: >
+        sshpass -p 'Welcome$25' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null 
+        str@10.10.10.102:/home/str/ansible_nautobot/firmware/ArubaOS-CX_6100-6000_10_13_1020.swi 
+        flash:/firmware.swi
+      register: scp_status

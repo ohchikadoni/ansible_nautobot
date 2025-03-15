@@ -1,14 +1,14 @@
 ---
-- name: Get devices from Nautobot and Backup Switch Configuration
+- name: Backup Aruba Switch Configuration
   hosts: localhost
   gather_facts: no
   vars:
-    ansible_command_timeout: 60
-    ansible_user: admin
-    ansible_password: admin
-    ansible_network_os: aruba 
-    ansible_connection: network_cli
-    ansible_ssh_extra_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+    ansible_user: admin       # Benutzername für SSH
+    ansible_password: admin   # Passwort für SSH
+    ansible_network_os: aruba  # Aruba OS
+    ansible_connection: network_cli  # SSH-Verbindung
+    ansible_ssh_extra_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"  
+    ansible_command_timeout: 60 
 
   tasks:
     - name: Get all devices from Nautobot
@@ -19,7 +19,6 @@
         headers:
           Authorization: "Token 3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
           Accept: "application/json; indent=4"
-        return_content: yes
       register: nautobot_response
 
     - name: Filter devices with backup enabled
@@ -32,7 +31,7 @@
         method: GET
         return_content: yes
         headers:
-          Authorization: "Token 3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
+          Authorization: "Token  3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
           Accept: "application/json; indent=4"
       loop: "{{ backup_devices }}"
       when: item.primary_ip4 is defined
@@ -47,28 +46,28 @@
         msg: "Hostname: {{ item.0.name }}, IP: {{ item.1 }}"
       loop: "{{ devices_with_ips }}" 
 
-    - name: Accept SSH key automatically
+    - name: Accept SSH key automatically (if not already added)
       shell: "ssh-keyscan -H {{ item.1.split('/')[0] }} >> ~/.ssh/known_hosts"
       loop: "{{ devices_with_ips }}"
       delegate_to: localhost
+      ignore_errors: yes
 
-    - name: Set terminal length to 0 (disable pagination)
-      aruba_command:
-        commands:
-          - terminal length 0
-      delegate_to: "{{ item.primary_ip4.address.split('/')[0] }}"
-      loop: "{{ backup_devices }}"
-      
     - name: Fetch running configuration from Aruba device
       aruba_command:
         commands:
           - show running-config
-      register: running_config
-      delegate_to: "{{ item.primary_ip4.address.split('/')[0] }}"
-      loop: "{{ backup_devices }}"
+      register: running_config_output
+      delegate_to: "{{ item.1.split('/')[0] }}"
+      loop: "{{ devices_with_ips }}"
+    
+    - name: Debug output of running config
+      debug:
+        msg: "{{ item.stdout }}"  # Zugriff auf stdout des aktuellen Elements in der Liste
+      loop: "{{ running_config_output.results }}"  # Schleife durch jedes Ergebnis der Anfrage
 
     - name: Save configuration to file
       copy:
-        content: "{{ running_config.stdout[0] }}"
-        dest: "{{ item.name }}.conf"
-      loop: "{{ backup_devices }}"
+        content: "{{ item.stdout[0] }}"  # Sichern der ersten Ausgabezeile aus stdout
+        dest: "/home/str/ansible_nautobot/.configs/{{ item.item.0.name }}.conf"
+      loop: "{{ running_config_output.results }}"
+      when: item.stdout is defined
