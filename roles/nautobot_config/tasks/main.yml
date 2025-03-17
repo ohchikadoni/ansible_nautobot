@@ -1,0 +1,67 @@
+- name: Query Nautobot API for interfaces
+  uri:
+    url: "http://10.10.10.101:8080/api/dcim/interfaces/?device=9ee2ad13-3be6-44e7-92ef-1103bbdfd8f6"
+    method: GET
+    headers:
+      Authorization: "Token 3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
+      Content-Type: "application/json; indent=4"
+    return_content: yes
+  register: response
+
+- name: Print Response of Interfaces
+  debug:
+    msg: "{{ response }}"
+
+
+- name: debug response structure from interfaces
+  debug:
+    msg: response.json
+
+
+
+- name: Retrieve VLAN details for interfaces (Untagged VLAN)
+  uri:
+    url: "http://10.10.10.101:8080/api/ipam/vlans/{{ item.id }}"
+    method: GET
+    headers:
+      Authorization: "Token 3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
+      Content-Type: "application/json; indent=4"
+    return_content: yes
+  loop: "{{ response.json.results | map(attribute='untagged_vlan') | selectattr('id', 'defined') | list }}"
+  loop_control:
+    label: "untagged_vlan"
+  when: item is not none and item.id is not none
+  register: untagged_vlan_details
+
+- name: Print untagged_vlan_details
+  debug:
+    msg: "{{ untagged_vlan_details }}"
+
+- name: Retrieve VLAN details for interfaces (Tagged VLAN)
+  uri:
+    url: "http://10.10.10.101:8080/api/ipam/vlans/{{ item.id }}"
+    method: GET
+    headers:
+      Authorization: "Token 3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
+      Content-Type: "application/json; indent=4"
+    return_content: yes
+      #loop: "{{ response.json.results | map(attribute='tagged_vlans') | selectattr('id', 'defined') | list }}"
+  loop: "{{ response.json.results | map(attribute='tagged_vlans') | select('defined') | list | flatten }}"
+  loop_control:
+    label: "tagged_vlan"
+      #when: item is not none and item.id is not none
+  register: tagged_vlan_details
+
+- name: Debug tagged VLAN details
+  debug:
+    msg: "{{ tagged_vlan_details }}"
+
+
+- name: Save interfaces data using Jinja2 template
+  template:
+    src: "config.j2"
+    dest: "/tmp/config.txt"
+  vars:
+    interfaces: "{{ response.json.results }}"
+    vlans: "{{ (untagged_vlan_details.results | map(attribute='json') | list) }}"
+    tagged_vlans: "{{ (tagged_vlan_details.results | map(attribute='json') | list) }}"

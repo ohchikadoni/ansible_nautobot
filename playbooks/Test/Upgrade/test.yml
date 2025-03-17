@@ -1,0 +1,70 @@
+---
+- name: Backup Aruba Switch Configuration
+  hosts: localhost
+  gather_facts: no
+  vars:
+    ansible_user: admin       # Benutzername für SSH
+    ansible_password: admin   # Passwort für SSH
+    ansible_network_os: aruba  # Aruba OS
+    ansible_connection: network_cli  # SSH-Verbindung
+    ansible_ssh_extra_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"  
+    ansible_command_timeout: 60
+
+  tasks:
+    - name: Get all devices from Nautobot
+      uri:
+        url: "http://10.10.10.101:8080/api/dcim/devices/"
+        method: GET
+        return_content: yes
+        headers:
+          Authorization: "Token 3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
+          Accept: "application/json; indent=4"
+      register: nautobot_response
+
+    - name: Filter devices with backup enabled
+      set_fact:
+        backup_devices: "{{ nautobot_response.json.results | selectattr('custom_fields.backup_state', 'equalto', true) | list }}"
+
+    - name: Fetch primary IPv4 address for each backup-enabled device
+      uri:
+        url: "{{ item.primary_ip4.url }}"
+        method: GET
+        return_content: yes
+        headers:
+          Authorization: "Token  3a28f76fe9d03a5467e955e71cc5b37c6a047b18"
+          Accept: "application/json; indent=4"
+      loop: "{{ backup_devices }}"
+      when: item.primary_ip4 is defined
+      register: ip_responses
+
+    - name: Merge IPs with devices
+      set_fact:
+        devices_with_ips: "{{ backup_devices | zip(ip_responses.results | map(attribute='json.address')) | list }}"
+
+    - name: Display hostnames and actual primary IPv4 addresses
+      debug:
+        msg: "Hostname: {{ item.0.name }}, IP: {{ item.1 }}"
+      loop: "{{ devices_with_ips }}" 
+
+    - name: Accept SSH key automatically (if not already added)
+      shell: "ssh-keyscan -H {{ item.1.split('/')[0] }} >> ~/.ssh/known_hosts"
+      loop: "{{ devices_with_ips }}"
+      delegate_to: localhost
+      ignore_errors: yes
+
+    - name: Fetch running configuration from Aruba device using expect
+      expect:
+        command: "ssh {{ ansible_user }}@{{ item.1.split('/')[0] }} 'copy sftp://str@10.10.10.102:22/home/str/ArubaOS-CX_6100-6000_10_13_1020.swi secondary'"
+        responses:
+          'Continue (y/n)?': 'y'
+          'Are you sure you want to continue connecting (yes/no)?': 'yes'  # Automatically confirm the connection
+          'Password:': '{{ ansible_password }}'  # Provide the password
+        timeout: 60  # Timeout for each interaction
+      register: running_config_output
+      delegate_to: localhost
+      loop: "{{ devices_with_ips }}"
+
+    - name: Debug output of running config
+      debug:
+        msg: "{{ item.stdout }}"  # Access the stdout of the current item in the list
+      loop: "{{ running_config_output.results }}"  # Loop through each result
